@@ -21,7 +21,12 @@ async def fetch_git(config: GitConfig, path: Path) -> None:
         )
 
     async def git(*args: str | Path) -> None:
-        proc = await asyncio.create_subprocess_exec("git", *args, cwd=path, env=env)
+        proc = await asyncio.create_subprocess_exec(
+            os.environ.get("KARSK_GIT", "git"),
+            *args,
+            cwd=path,
+            env=env,
+        )
         returncode = await proc.wait()
         if returncode != os.EX_OK:
             raise RuntimeError(f"git {args[0]} failed with exit code {returncode}")
