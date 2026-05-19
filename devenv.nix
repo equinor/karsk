@@ -10,5 +10,6 @@
     venv.enable = true;
   };
 
-  languages.rust.enable = true;
+  # Use system git rather than Nix' because of code signing shenanigans on macOS
+  env.KARSK_GIT = "/usr/bin/git";
 }

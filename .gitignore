@@ -35,3 +35,6 @@ site/
 
 # karsk-enter side-effects
 .bash_history
+
+# Karsk Web
+karsk-web.json
