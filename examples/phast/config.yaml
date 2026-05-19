@@ -3,7 +3,8 @@
 destination: /opt/phast
 main-package: phast
 entrypoints:
-  - phast
+  - phast3
+  - phastinput
 build-image: ./Containerfile
 tests: ./karsk_tests/
 
