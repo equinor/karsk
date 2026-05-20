@@ -1,9 +1,10 @@
 mod util;
 mod versions;
 
-use std::env::{args, current_exe};
+use std::env::{args, args_os, current_exe};
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{Write, stdout};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,30 +17,34 @@ const DEFAULT_VERSION: &str = "stable";
 #[derive(Debug, PartialEq, Eq)]
 enum Action {
     PrintVersions,
-    Output(String),
+    OsOutput(OsString),
     Command {
         program: PathBuf,
-        args: Vec<String>,
+        args: Vec<OsString>,
         show_help: bool,
     },
     Error(String),
 }
 
 impl Action {
-    fn parse_version_arg(args: &[String], pos: usize) -> Option<String> {
+    fn parse_version_arg(args: &[OsString], pos: usize) -> Option<OsString> {
         // A version name cannot start with a hypen (-) to avoid confusing them for args.
         args.get(pos)
             .cloned()
-            .filter(|arg| arg.chars().nth(0) != Some('-'))
+            .filter(|arg| arg.as_bytes().first() != Some(&b'-'))
     }
 
-    pub fn parse_args(versions_dir: impl AsRef<Path>, exe_name: String, args: &[String]) -> Action {
+    pub fn parse_args(
+        versions_dir: impl AsRef<Path>,
+        program: OsString,
+        args: &[OsString],
+    ) -> Action {
         let versions_dir = versions_dir.as_ref();
         let mut show_help: bool = false;
-        let mut version: String = DEFAULT_VERSION.into();
+        let mut version: OsString = DEFAULT_VERSION.into();
 
         let mut pos: usize = 0;
-        if let Some(arg1) = args.get(pos).map(|s| s.as_str()) {
+        if let Some(arg1) = args.get(pos).and_then(|s| s.to_str()) {
             match arg1 {
                 "-h" | "--help" => {
                     show_help = true;
@@ -55,9 +60,10 @@ impl Action {
                 }
                 "--print-version-path" => {
                     if let Some(v) = Action::parse_version_arg(args, pos + 1)
-                        .and_then(|s| versions_dir.join(s).to_str().map(|x| x.to_string()))
+                        .map(|s| versions_dir.join(s))
+                        .map(|p| p.into_os_string())
                     {
-                        return Action::Output(v);
+                        return Action::OsOutput(v);
                     }
                 }
                 _ => {}
@@ -68,7 +74,7 @@ impl Action {
             return Action::Error(format!("[Karsk wrapper] No such version: {:?}", version));
         }
 
-        let program = versions_dir.join(version).join("bin").join(exe_name);
+        let program = versions_dir.join(version).join("bin").join(program);
 
         Action::Command {
             program,
@@ -79,17 +85,13 @@ impl Action {
 }
 
 fn main() {
-    let mut args = args();
+    let mut args = args_os();
 
     let executable = current_exe().expect("Couldn't obtain the wrapper's executable path");
-    let exename = args
+    let program = args
         .next()
         .map(PathBuf::from)
-        .and_then(|arg0| {
-            arg0.file_name()
-                .map(|s| s.to_owned())
-                .and_then(|s| s.into_string().ok())
-        })
+        .and_then(|arg0| arg0.file_name().map(|s| s.to_os_string()))
         .expect("Couldn't obtain the wrapper's executable name");
 
     let versions_dir = executable
@@ -98,12 +100,12 @@ fn main() {
         .map(|p| p.join("versions"))
         .expect("Couldn't determine 'versions' directory");
 
-    match Action::parse_args(versions_dir.clone(), exename, &args.collect::<Vec<_>>()) {
+    match Action::parse_args(versions_dir.clone(), program, &args.collect::<Vec<_>>()) {
         Action::PrintVersions => {
             print_versions_to(versions_dir, &mut stdout());
         }
-        Action::Output(text) => {
-            println!("{}", text);
+        Action::OsOutput(text) => {
+            let _ = std::io::stdout().write(text.as_bytes());
         }
         Action::Command {
             program,
@@ -168,9 +170,13 @@ mod tests {
         symlink("/usr/bin/true", tmpdir.join("versions/1.2.3/bin/some-exec")).unwrap();
         symlink("1.2.3", tmpdir.join("versions/stable")).unwrap();
 
-        let vargs: Vec<String> = args.into_iter().map(|x| x.to_string()).collect();
+        let vargs: Vec<OsString> = args
+            .into_iter()
+            .map(|x| x.to_string())
+            .map(|x| OsString::from(x))
+            .collect();
 
-        Action::parse_args(tmpdir.join("versions"), String::from("some-exec"), &vargs)
+        Action::parse_args(tmpdir.join("versions"), OsString::from("some-exec"), &vargs)
     }
 
     #[test]
@@ -198,7 +204,7 @@ mod tests {
             action,
             Action::Command {
                 program: tmpdir.join("versions/stable/bin/some-exec"),
-                args: vec![String::from("--version")],
+                args: vec![OsString::from("--version")],
                 show_help: false,
             }
         );
@@ -229,9 +235,9 @@ mod tests {
             Action::Command {
                 program: tmpdir.join("versions/1.2.3/bin/some-exec"),
                 args: vec![
-                    String::from("-fi"),
-                    String::from("fo"),
-                    String::from("--fum")
+                    OsString::from("-fi"),
+                    OsString::from("fo"),
+                    OsString::from("--fum")
                 ],
                 show_help: false,
             }
@@ -258,7 +264,7 @@ mod tests {
             action,
             Action::Command {
                 program: tmpdir.join("versions/stable/bin/some-exec"),
-                args: vec![String::from("--version"), String::from("--hello")],
+                args: vec![OsString::from("--version"), OsString::from("--hello")],
                 show_help: false,
             }
         );
@@ -271,7 +277,7 @@ mod tests {
 
         assert_eq!(
             action,
-            Action::Output(tmpdir.join("versions/1.2.3").to_str().unwrap().to_string())
+            Action::OsOutput(tmpdir.join("versions/1.2.3").into_os_string())
         );
     }
 }
