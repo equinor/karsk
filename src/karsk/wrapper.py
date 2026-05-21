@@ -49,7 +49,9 @@ async def build_wrapper(
             "cargo",
             "build",
             "--release",
+            "--offline",
             cwd="/work",
+            network=False,
             volumes=[
                 (wrapper_src, "/work", "rw"),
                 (tmpdir, "/work/target", "rw"),
