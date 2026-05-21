@@ -46,4 +46,5 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
       - name: Run tests
+        working-directory: src/karsk/data/wrapper-rs-tests
         run: cargo test --target ${{ matrix.target }}
