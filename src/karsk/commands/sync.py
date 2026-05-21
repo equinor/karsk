@@ -59,6 +59,7 @@ class Sync:
         self._pre_script.write("set -euxo pipefail\n")
         self._pre_script.write(f"mkdir -p {self.to_paths.store}\n")
         self._pre_script.write(f"mkdir -p {self.to_paths.versions}\n")
+        self._pre_script.write(f"mkdir -p {self.to_paths.bin}\n")
 
         # Create symlinking script
         self._post_script: io.StringIO = io.StringIO()
@@ -90,7 +91,15 @@ class Sync:
             context="versions",
         )
 
-        # 4. Sync all symlinks
+        # 4. Sync bin/ (wrapper binary and entrypoint symlinks)
+        await self._rsync(
+            area,
+            [self.from_paths.bin],
+            self.from_paths.bin.parent,
+            context="bin",
+        )
+
+        # 5. Sync all symlinks
         await self._bash(area, self._post_script.getvalue(), context="symlinks")
 
     async def _bash(
