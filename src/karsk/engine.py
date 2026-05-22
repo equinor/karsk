@@ -95,6 +95,10 @@ class _Engine:
         if await self._has_image(image_name):
             return image_name
 
+        build_extra_args: list[str] = []
+        if self.name == "podman":
+            build_extra_args.extend(["--security-opt", "label=disable"])
+
         proc = await asyncio.create_subprocess_exec(
             self.name,
             "build",
@@ -106,6 +110,7 @@ class _Engine:
             image_name,
             "--label",
             "karsk",
+            *build_extra_args,
             image.parent,
         )
         if await proc.wait() != os.EX_OK:
