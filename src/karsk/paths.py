@@ -14,7 +14,7 @@ class Paths:
     ) -> None:
         base = base.absolute()
         self._base = base
-        self._cache = cache
+        self._cache = cache.absolute() if cache is not None else None
         self._is_staging = is_staging
 
         self.bin = base / "bin"
