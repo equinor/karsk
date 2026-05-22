@@ -200,7 +200,7 @@ async def test_build_with_non_local_prefix(tmp_path, base_config):
     (pkg / "bin").mkdir()
     (pkg / "bin/hello").write_text("#!/bin/bash\necho hello\n")
 
-    await _build_envs(ctx, ctx.staging_paths)
+    await _build_envs(ctx, ctx.staging_paths, staging=True)
 
     assert (staging / "bin/hello").exists()
     assert (staging / "versions/stable").is_symlink()
@@ -233,7 +233,7 @@ async def test_multiple_entrypoints_creates_wrapper_scripts(tmp_path, base_confi
     (pkg / "bin/beta").write_text('#!/bin/bash\necho beta "$@"\n')
     (pkg / "bin/beta").chmod(0o755)
 
-    await _build_envs(ctx, ctx.staging_paths)
+    await _build_envs(ctx, ctx.staging_paths, staging=True)
 
     wrapper_alpha = staging / "bin/alpha"
     wrapper_beta = staging / "bin/beta"
@@ -275,7 +275,7 @@ async def test_install_appends_build_id_when_manifest_differs(
     (pkg1 / "bin").mkdir()
     (pkg1 / "bin/hello").write_text("v1")
 
-    await _build_envs(ctx1, ctx1.staging_paths)
+    await _build_envs(ctx1, ctx1.staging_paths, staging=True)
     await install_all(ctx1, target_paths=ctx1.destination_paths)
 
     assert (staging / "versions/1.0.0+1").is_dir()
@@ -295,7 +295,7 @@ async def test_install_appends_build_id_when_manifest_differs(
     (pkg2 / "bin").mkdir()
     (pkg2 / "bin/hello").write_text("v2")
 
-    await _build_envs(ctx2, ctx1.staging_paths)
+    await _build_envs(ctx2, ctx1.staging_paths, staging=True)
 
     assert (staging / "versions/1.0.0+1").is_dir()
 

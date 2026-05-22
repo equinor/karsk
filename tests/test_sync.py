@@ -111,7 +111,7 @@ async def test_sync_with_non_local_prefix(tmp_path, base_config, areas, uname):
 
     installed_file_path.write_text("test")
 
-    await _build_envs(ctx, ctx.staging_paths)
+    await _build_envs(ctx, ctx.staging_paths, staging=True)
 
     await sync_all(ctx, areas, uname=uname)
 
