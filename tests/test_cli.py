@@ -110,7 +110,6 @@ def test_sync_accepts_args(mock_sync, runner, config_file, areas_file):
             str(areas_file),
             "--staging",
             str(config_file.parent),
-            "--dry-run",
         ],
     )
     assert result.exit_code == 0, result.output

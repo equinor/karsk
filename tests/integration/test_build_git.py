@@ -11,13 +11,14 @@ def test_context(context: Context) -> None:
 async def test_checkout(context: Context, tmp_path: Path) -> None:
     await build_all(context)
 
-    assert (context.out("foo") / "lib/libfoo.so").is_file()
-    assert (context.out("bar") / "bin/bar").is_file()
+    assert (context.out_staging("foo") / "lib/libfoo.so").is_file()
+    assert (context.out_staging("bar") / "bin/bar").is_file()
 
     proc = await context.run(
-        str(context.out("bar", staging=False) / "bin/bar"), stdout=PIPE
+        str(context.out_destination("bar") / "bin/bar"), stdout=PIPE
     )
     await proc.wait()
 
+    assert proc.stdout is not None
     stdout = await proc.stdout.read()
     assert stdout == b"I am a test\n"

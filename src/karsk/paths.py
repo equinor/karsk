@@ -5,27 +5,35 @@ from karsk.package import Package
 
 
 class Paths:
-    def __init__(self, base: Path, *, is_staging: bool = False) -> None:
+    def __init__(
+        self,
+        base: Path,
+        *,
+        cache: Path | None = None,
+        is_staging: bool = False,
+    ) -> None:
         base = base.absolute()
-        self._base: Path = base
-        self._is_staging: bool = is_staging
+        self._base = base
+        self._cache = cache
+        self._is_staging = is_staging
 
-        self.bin: Path = base / "bin"
-        self.versions: Path = base / "versions"
-        self.store: Path = base / "store"
+        self.bin = base / "bin"
+        self.versions = base / "versions"
+        self.store = base / "store"
+
+        if is_staging:
+            self.store.mkdir(parents=True, exist_ok=True)
 
     @property
     def cache(self) -> Path:
         self._assert_not_staging("Cache path")
-        return self._base / "cache"
+        assert self._cache is not None
+        return self._cache
 
     @property
     def builds(self) -> Path:
         self._assert_not_staging("Builds path")
         return self._base / "builds"
-
-    def out(self, pkg: Package) -> Path:
-        return self.store / pkg.out_relpath
 
     def src(self, pkg: Package) -> Path | None:
         if (p := pkg.src_relpath) is None:

@@ -1,5 +1,4 @@
 import os
-import subprocess
 from pathlib import Path
 import shutil
 import pytest
@@ -181,34 +180,6 @@ async def test_not_overwrite_user_set_version_alias_with_default(tmp_path, base_
     assert str((tmp_path / "versions/1").readlink()) == "1.1"
 
 
-async def test_hello_world_example(tmp_path, monkeypatch):
-    pytest.skip()
-    import shutil
-    import yaml
-
-    example_dir = Path(__file__).parent.parent / "examples" / "hello_world"
-    work_dir = tmp_path / "hello_world"
-    shutil.copytree(example_dir, work_dir, ignore=shutil.ignore_patterns("output"))
-
-    config_path = work_dir / "config.yaml"
-    config_data = yaml.safe_load(config_path.read_text())
-    config_data["destination"] = str(tmp_path)
-    config_path.write_text(yaml.dump(config_data))
-
-    monkeypatch.chdir(work_dir)
-
-    ctx = Context.from_config_file(
-        Path("config.yaml"), staging=tmp_path, engine="native"
-    )
-    await build_all(ctx)
-
-    wrapper = tmp_path / "bin" / "binary.sh"
-    assert wrapper.exists()
-    result = subprocess.run([str(wrapper)], capture_output=True, text=True)
-    assert result.returncode == 0
-    assert "running with args:" in result.stdout
-
-
 async def test_build_with_non_local_prefix(tmp_path, base_config):
     from karsk.builder import _build_envs
 
@@ -224,7 +195,7 @@ async def test_build_with_non_local_prefix(tmp_path, base_config):
         base_config, cwd=tmp_path, staging=staging, engine="native"
     )
 
-    pkg = ctx.out("test")
+    pkg = ctx.out_staging("test")
     pkg.mkdir(parents=True)
     (pkg / "bin").mkdir()
     (pkg / "bin/hello").write_text("#!/bin/bash\necho hello\n")
@@ -254,7 +225,7 @@ async def test_multiple_entrypoints_creates_wrapper_scripts(tmp_path, base_confi
         base_config, cwd=tmp_path, staging=staging, engine="native"
     )
 
-    pkg = ctx.out("test")
+    pkg = ctx.out_staging("test")
     pkg.mkdir(parents=True)
     (pkg / "bin").mkdir()
     (pkg / "bin/alpha").write_text('#!/bin/bash\necho alpha "$@"\n')
@@ -299,13 +270,13 @@ async def test_install_appends_build_id_when_manifest_differs(
     ctx1 = Context.from_config(
         base_config, cwd=tmp_path, staging=staging, engine="native"
     )
-    pkg1 = ctx1.out("test")
+    pkg1 = ctx1.out_staging("test")
     pkg1.mkdir(parents=True)
     (pkg1 / "bin").mkdir()
     (pkg1 / "bin/hello").write_text("v1")
 
     await _build_envs(ctx1, ctx1.staging_paths)
-    await install_all(ctx1)
+    await install_all(ctx1, target_paths=ctx1.destination_paths)
 
     assert (staging / "versions/1.0.0+1").is_dir()
     assert (destination / "versions/1.0.0+1").is_dir()
@@ -319,7 +290,7 @@ async def test_install_appends_build_id_when_manifest_differs(
     ctx2 = Context.from_config(
         base_config, cwd=tmp_path, staging=staging, engine="native"
     )
-    pkg2 = ctx2.out("test")
+    pkg2 = ctx2.out_staging("test")
     pkg2.mkdir(parents=True)
     (pkg2 / "bin").mkdir()
     (pkg2 / "bin/hello").write_text("v2")
@@ -328,7 +299,7 @@ async def test_install_appends_build_id_when_manifest_differs(
 
     assert (staging / "versions/1.0.0+1").is_dir()
 
-    await install_all(ctx2)
+    await install_all(ctx2, target_paths=ctx2.destination_paths)
 
     assert (destination / "versions/1.0.0+1").is_dir()
     assert (destination / "versions/1.0.0+2").is_dir()

@@ -1,4 +1,6 @@
 from __future__ import annotations
+from itertools import chain
+import hashlib
 from pathlib import Path
 import sys
 from typing import IO, Any, Self
@@ -14,9 +16,9 @@ from karsk.engine import (
     get_engine,
 )
 from karsk.package import Package
-from karsk.package_list import PackageList
 from karsk.console import console
 from karsk.paths import Paths
+import networkx as nx
 
 
 TARGET_TRIPLETS: dict[CpuArchName, str] = {
@@ -37,17 +39,55 @@ class Context:
         self.config: Config = config
         self.engine: Engine = get_engine(engine, arch)
 
+        cache = staging / "cache"
         if self.engine.name != "native":
             staging = staging / config.main_package / TARGET_TRIPLETS[self.engine.arch]
 
-        self.staging_paths: Paths = Paths(staging, is_staging=True)
-        self.target_paths: Paths = Paths(config.destination)
-        self.plist: PackageList = PackageList(
-            config,
-            self.staging_paths,
-            self.target_paths,
-            check_existence=False,
-        )
+        self.staging_paths: Paths = Paths(staging, cache=cache, is_staging=True)
+        self.destination_paths: Paths = Paths(config.destination)
+        self.packages = self._resolve_packages(config)
+
+    @classmethod
+    def _initial_hash(cls, config: Config) -> bytes:
+        h = hashlib.sha1(usedforsecurity=False)
+
+        h.update(config.destination.as_posix().encode())
+        h.update(config.build_image.read_bytes())
+
+        return h.digest()
+
+    @classmethod
+    def _resolve_packages(cls, config: Config) -> dict[str, Package]:
+        buildmap = {x.name: x for x in config.packages}
+
+        graph: nx.DiGraph[str] = nx.DiGraph()
+        for package in config.packages:
+            graph.add_node(package.name)
+            for dep in package.depends:
+                graph.add_edge(dep, package.name)
+
+        initial_hash = cls._initial_hash(config)
+        transitive_depends: dict[Package, list[Package]] = {}
+        packages: dict[str, Package] = {}
+        for node in nx.topological_sort(graph):
+            package_config = buildmap[node]
+
+            direct_depends = [packages[x] for x in package_config.depends]
+            node_depends = [
+                *direct_depends,
+                *chain.from_iterable(transitive_depends[x] for x in direct_depends),
+            ]
+
+            new_package = Package(
+                package_config,
+                node_depends,
+                config.build_image,
+                initial_hash,
+            )
+            transitive_depends[new_package] = node_depends
+            packages[node] = new_package
+
+        return packages
 
     @property
     def destination(self) -> Path:
@@ -58,16 +98,35 @@ class Context:
         """Returns True is it's possible to enter an interactive shell for debugging purposes"""
         return sys.stdin.isatty()
 
-    @property
-    def packages(self) -> dict[str, Package]:
-        return self.plist.packages
-
-    def out(self, package: Package | str, *, staging: bool = True) -> Path:
-        """Helper for obtaining the output path for a given package. Mainly for use in tests"""
+    def _out_rw(self, package: Package | str, paths: Paths) -> Path:
         if isinstance(package, str):
             package = self.packages[package]
-        paths = self.staging_paths if staging else self.target_paths
-        return paths.out(package)
+        return paths.store / package.out_relpath
+
+    def out_staging(self, package: Package | str) -> Path:
+        """Helper for obtaining the output path for a given package"""
+        return self._out_rw(package, self.staging_paths)
+
+    def out_destination(self, package: Package | str) -> Path:
+        """Helper for obtaining the output path for a given package"""
+        return self._out_rw(package, self.destination_paths)
+
+    def out_any(self, package: Package | str) -> Path:
+        """Look for package anywhere. Return None if it doesn't exist anywhere"""
+        if isinstance(package, str):
+            package = self.packages[package]
+        for store in (self.staging_paths.store, self.destination_paths.store):
+            if (path := store / package.out_relpath).is_dir():
+                return path
+
+        raise FileNotFoundError()
+
+    def exists(self, package: Package | str) -> bool:
+        try:
+            self.out_any(package)
+            return True
+        except FileNotFoundError:
+            return False
 
     def __getitem__(self, key: str) -> Package:
         return self.packages[key]
@@ -107,10 +166,10 @@ class Context:
 
         missing: list[str] = []
         for pname in packages:
-            if (pkg := self.plist.packages.get(pname)) is None:
+            if (pkg := self.packages.get(pname)) is None:
                 raise ValueError(f"No package {pname} defined")
 
-            if not self.staging_paths.out(pkg).is_dir():
+            if not self.out_any(pkg).is_dir():
                 missing.append(pname)
 
         if missing:
@@ -157,24 +216,24 @@ class Context:
             image = self.config.build_image
 
             if package is None:
-                package = sorted(self.plist.packages.keys())
+                package = sorted(self.packages.keys())
             elif isinstance(package, str):
                 package = [package]
 
             self.ensure_built(package)
 
         if self.staging_paths.bin.is_dir():
-            volumes.append((self.staging_paths.bin, self.target_paths.bin, "ro"))
+            volumes.append((self.staging_paths.bin, self.destination_paths.bin, "ro"))
         if self.staging_paths.versions.is_dir():
             volumes.append(
-                (self.staging_paths.versions, self.target_paths.versions, "ro")
+                (self.staging_paths.versions, self.destination_paths.versions, "ro")
             )
 
         return await self.engine(
             image,
             program,
             *args,
-            volumes=volumes + self.plist.volumes(package),
+            volumes=volumes + self.volumes(package),
             cwd=cwd,
             env=env,
             terminal=terminal,
@@ -182,3 +241,10 @@ class Context:
             stdout=stdout,
             stderr=stderr,
         )
+
+    def volumes(self, package_names: list[str]) -> list[VolumeBind]:
+        pnames = set(package_names)
+        for pname in package_names:
+            pnames |= set(p.config.name for p in self[pname].depends)
+
+        return [(self.out_any(pkg), self.out_destination(pkg), "ro") for pkg in pnames]

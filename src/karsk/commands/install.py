@@ -25,4 +25,4 @@ def subcommand_install(
     engine: EngineName | None,
 ) -> None:
     context = Context.from_config_file(config_file, staging=staging, engine=engine)
-    asyncio.run(install_all(context))
+    asyncio.run(install_all(context, target_paths=context.destination_paths))
