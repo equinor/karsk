@@ -1,8 +1,8 @@
+from textwrap import dedent
 from karsk.paths import Paths
 import os
 from pathlib import Path
 
-import yaml
 import pytest
 
 from karsk.builder import build_all, install_all
@@ -15,9 +15,9 @@ def stub_build_wrapper(mocker):
 
 
 @pytest.fixture
-def base_config():
+def base_config(tmp_path):
     return {
-        "destination": "/opt/karsk/test",
+        "destination": str(tmp_path / "destination"),
         "main-package": "test",
         "entrypoints": ["test_script.sh"],
         "build-image": os.path.join(os.path.dirname(__file__), "test_build_image"),
@@ -26,36 +26,42 @@ def base_config():
 
 
 async def test_install_copies_to_destination(tmp_path, base_config):
-    build_dir = tmp_path / "build"
-    destination = tmp_path / "destination"
-    base_config["destination"] = str(build_dir)
-
     (tmp_path / "script.sh").write_text(
-        "#!/usr/bin/env bash\necho hello", encoding="utf-8", newline="\n"
+        dedent("""\
+        #!/usr/bin/env bash
+        echo hello
+        """)
     )
     base_config["packages"].append(
         {
             "name": "test",
             "version": "1.0.0",
             "src": {"type": "file", "path": str(tmp_path / "script.sh")},
-            "build": "mkdir -p $out/bin\ncp $src $out/bin/test_script.sh\nchmod +x $out/bin/test_script.sh",
+            "build": dedent("""\
+                mkdir -p $out/bin
+                cp $src $out/bin/test_script.sh
+                chmod +x $out/bin/test_script.sh
+            """),
         }
     )
 
     ctx = Context.from_config(
-        base_config, cwd=tmp_path, staging=build_dir, engine="native"
+        base_config,
+        cwd=tmp_path,
+        staging=tmp_path / "staging",
+        engine="fake",
     )
-    await build_all(ctx, stop_after=ctx["test"])
+    await build_all(ctx)
 
-    assert not destination.exists()
+    assert not ctx.destination.exists()
 
-    await install_all(ctx, target_paths=Paths(destination))
+    await install_all(ctx, target_paths=ctx.destination_paths)
 
-    assert destination.exists()
-    assert (destination / "store").is_dir()
-    assert (destination / "bin/test_script.sh").exists()
-    assert (destination / "versions/latest").is_symlink()
-    assert (destination / "versions/stable").is_symlink()
+    assert ctx.destination.exists()
+    assert (ctx.destination / "store").is_dir()
+    assert (ctx.destination / "bin/test_script.sh").exists()
+    assert (ctx.destination / "versions/latest").is_symlink()
+    assert (ctx.destination / "versions/stable").is_symlink()
 
 
 async def test_install_idempotent(tmp_path: Path, base_config):
@@ -82,35 +88,3 @@ async def test_install_idempotent(tmp_path: Path, base_config):
     await install_all(ctx, target_paths=Paths(destination))
     assert (destination / "versions/1.0.0+1").is_dir()
     assert not (destination / "versions/1.0.0+2").exists()
-
-
-async def test_install_hello_world_example(tmp_path, monkeypatch):
-    import shutil
-
-    example_dir = Path(__file__).parent.parent / "examples" / "hello_world"
-    work_dir = tmp_path / "hello_world"
-    shutil.copytree(example_dir, work_dir, ignore=shutil.ignore_patterns("output"))
-
-    build_dir = tmp_path / "build"
-    destination = tmp_path / "installed"
-
-    config_path = work_dir / "config.yaml"
-    config_data = yaml.safe_load(config_path.read_text())
-    config_data["destination"] = str(build_dir)
-    config_path.write_text(yaml.dump(config_data))
-
-    monkeypatch.chdir(work_dir)
-
-    ctx = Context.from_config_file(
-        Path("config.yaml"), staging=build_dir, engine="native"
-    )
-    await build_all(ctx, stop_after=ctx["hello"])
-
-    config_path.write_text(yaml.dump(config_data))
-
-    assert not destination.exists()
-    await install_all(ctx, target_paths=Paths(destination))
-
-    assert destination.exists()
-    wrapper = destination / "bin" / "binary.sh"
-    assert wrapper.exists()

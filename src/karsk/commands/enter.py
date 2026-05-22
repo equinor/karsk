@@ -71,12 +71,12 @@ async def _main(ctx: Context, *args: str, volumes: tuple[VolumeBind, ...]) -> No
         *args,
         volumes=[
             (KARSK_BASHRC, "/etc/karsk.bashrc", "ro"),
-            (ctx.staging_paths.bin, ctx.target_paths.bin, "ro"),
-            (ctx.staging_paths.versions, ctx.target_paths.versions, "ro"),
+            (ctx.staging_paths.bin, ctx.destination_paths.bin, "ro"),
+            (ctx.staging_paths.versions, ctx.destination_paths.versions, "ro"),
             (home, home, "rw"),
             *volumes,
         ],
-        env={"KARSK_PATH": str(ctx.target_paths.bin)},
+        env={"KARSK_PATH": str(ctx.destination_paths.bin)},
         cwd=cwd,
         terminal=True,
     )

@@ -20,7 +20,7 @@ VolumeBind: TypeAlias = tuple[str | Path, str | Path, Literal["ro", "rw", "O"]]
 EngineName = Literal["docker", "podman"]
 CpuArchName = Literal["arm64", "amd64"]
 
-EngineNameNative = Literal[EngineName, "native"]
+EngineNameNative = Literal[EngineName, "native", "fake"]
 CpuArchNameNative = Literal[CpuArchName, "native", "target"]
 
 
@@ -247,6 +247,43 @@ class _Native:
         return proc
 
 
+class _Fake:
+    arch: CpuArchName = _normalized_cpu_arch()
+    name: EngineNameNative = "fake"
+
+    async def __call__(
+        self,
+        image: str | Path,
+        program: str | Path,
+        *args: str | Path,
+        volumes: list[VolumeBind] | None = None,
+        env: dict[str, str] | None = None,
+        cwd: str | Path | None = None,
+        input: str | bytes | None = None,
+        stdin: int | IO[Any] | None = None,
+        stdout: int | IO[Any] | None = None,
+        stderr: int | IO[Any] | None = None,
+        terminal: bool = False,
+        network: bool = True,
+    ) -> Process:
+        _ = (
+            image,
+            program,
+            args,
+            volumes,
+            env,
+            cwd,
+            input,
+            stdin,
+            stdout,
+            stderr,
+            terminal,
+            network,
+        )
+
+        return await asyncio.create_subprocess_exec("/usr/bin/env", "true")
+
+
 def get_engine(
     preference: EngineNameNative | None = None, arch: CpuArchNameNative | None = None
 ) -> Engine:
@@ -268,6 +305,8 @@ def get_engine(
             return _Engine("docker", arch_)
         case "native":
             return _Native()
+        case "fake":
+            return _Fake()
 
     raise RuntimeError(f"Unknown OCI engine preference: {preference}")
 

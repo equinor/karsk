@@ -34,8 +34,8 @@ async def test_hello_world_example(tmp_path, monkeypatch):
     )
     assert wrapper.exists()
     proc = await ctx.run(
-        ctx.out("hello", staging=False) / "bin/binary.sh", stdout=PIPE, stderr=PIPE
+        ctx.out_destination("hello") / "bin/binary.sh", stdout=PIPE, stderr=PIPE
     )
-    stdout, stderr = await proc.communicate()
+    stdout, _stderr = await proc.communicate()
     assert proc.returncode == 0
     assert b"running with args:" in stdout

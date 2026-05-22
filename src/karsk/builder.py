@@ -36,6 +36,8 @@ async def _async_build(
             "#!/usr/bin/env bash\n",
             'echo "src: $src"\n',
             'echo "out: $out"\n',
+            "echo\n",
+            *(f'echo "{x}: ${x}"\n' for x in env.keys() if x not in ("src", "out")),
             "set -eux -o pipefail\n",
             pkg.config.build,
         ]
@@ -44,6 +46,10 @@ async def _async_build(
     tmpfile.close()
 
     volumes.append((tmpfile.name, tmpfile.name, "ro"))
+
+    console.log("Mounting volumes:")
+    for index, (src, dst, mode) in enumerate(volumes):
+        console.log(f"{index + 1}. {dst} (host: {src}) as {mode}")
 
     proc = await ctx.engine(
         pkg.build_image,
@@ -89,18 +95,19 @@ async def _async_build(
 
 
 async def _build(ctx: Context, pkg: Package, tmp: str) -> None:
-    out = ctx.staging_paths.out(pkg)
-    if out.is_dir():
+    if ctx.exists(pkg):
         console.log(
-            f"Ignoring {pkg.fullname}: Already built at {out}",
+            f"Ignoring {pkg.fullname}: Already built at {ctx.out_any(pkg)}",
         )
         return
+
+    out = ctx.out_staging(pkg)
 
     if ctx.engine.name == "native":
         # We use the target path in native mode. If an error occurs during
         # building, the bad build will stay and will result in a bad
         # installation. This is OK because 'native' is only used in tests.
-        tmp_out = ctx.staging_paths.out(pkg)
+        tmp_out = ctx.out_staging(pkg)
     else:
         tmp_out = ctx.staging_paths.builds / pkg.config.name
     shutil.rmtree(tmp_out, ignore_errors=True)
@@ -135,9 +142,9 @@ def _prepare_build_env(
     ctx: Context, pkg: Package, src: Path | None, tmp_out: Path, tmp: str
 ) -> tuple[dict[str, str], list[VolumeBind], Path]:
     env = {
-        **{x.config.name: str(ctx.target_paths.out(x)) for x in pkg.depends},
+        **{x.config.name: str(ctx.out_destination(x)) for x in pkg.depends},
         "tmp": tmp,
-        "out": str(ctx.target_paths.out(pkg)),
+        "out": str(ctx.out_destination(pkg)),
         "CFLAGS": "-O3",
         "CXXFLAGS": "-O3",
         "FOPTFLAGS": "-O3",
@@ -145,7 +152,7 @@ def _prepare_build_env(
     }
 
     volumes: list[VolumeBind] = [
-        (ctx.staging_paths.out(x), ctx.target_paths.out(x), "ro") for x in pkg.depends
+        (ctx.out_any(x), ctx.out_destination(x), "ro") for x in pkg.depends
     ]
     if src is not None:
         env["src"] = (
@@ -162,13 +169,13 @@ def _prepare_build_env(
     elif src is not None and ctx.engine.name != "native":
         volumes.append((src, f"/tmp/pkgsrc/{src.name}", "ro"))
 
-    volumes.append((tmp_out, ctx.target_paths.out(pkg), "rw"))
+    volumes.append((tmp_out, ctx.out_destination(pkg), "rw"))
 
     return env, volumes, cwd
 
 
 async def _build_packages(ctx: Context, stop_after: Package | None = None) -> None:
-    for pkg in ctx.plist.packages.values():
+    for pkg in ctx.packages.values():
         with TemporaryDirectory() as tmp:
             await _build(ctx, pkg, tmp)
         if pkg is stop_after:
@@ -180,10 +187,10 @@ async def _build_envs(
     ctx: Context,
     paths: Paths,
 ) -> None:
-    pkg = ctx.plist.packages[ctx.config.main_package]
+    pkg = ctx.packages[ctx.config.main_package]
     env_path = _get_versions_path(paths, pkg)
     if env_path is not None:
-        _build_env_for_package(paths, env_path, pkg)
+        _build_env_for_package(ctx, env_path, pkg)
 
     default_links: dict[str, str] = {"latest": "^", "stable": "latest"}
     make_links(
@@ -194,9 +201,9 @@ async def _build_envs(
     await install_wrapper(ctx, paths)
 
 
-def _build_env_for_package(paths: Paths, env_path: Path, main_package: Package) -> None:
+def _build_env_for_package(ctx: Context, env_path: Path, main_package: Package) -> None:
     for pkg in chain([main_package], main_package.depends):
-        out = paths.out(pkg).resolve()
+        out = ctx.out_any(pkg)
         for srcdir, _, files in os.walk(out):
             srcdir_path = Path(srcdir)
             dstdir = env_path / srcdir_path.relative_to(out)
@@ -238,13 +245,10 @@ async def build_all(ctx: Context, stop_after: Package | None = None) -> None:
     await _build_envs(ctx, ctx.staging_paths)
 
 
-async def install_all(ctx: Context, *, target_paths: Paths | None = None) -> None:
-    if target_paths is None:
-        target_paths = ctx.target_paths
-
-    for pkg in ctx.plist.packages.values():
-        from_path = ctx.staging_paths.out(pkg)
-        to_path = target_paths.out(pkg)
+async def install_all(ctx: Context, *, target_paths: Paths) -> None:
+    for pkg in ctx.packages.values():
+        from_path = ctx.out_staging(pkg)
+        to_path = ctx.out_destination(pkg)
 
         if not from_path.exists():
             sys.exit(
