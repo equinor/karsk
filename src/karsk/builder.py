@@ -186,11 +186,13 @@ async def _build_packages(ctx: Context, stop_after: Package | None = None) -> No
 async def _build_envs(
     ctx: Context,
     paths: Paths,
+    *,
+    staging: bool,
 ) -> None:
     pkg = ctx.packages[ctx.config.main_package]
     env_path = _get_versions_path(paths, pkg)
     if env_path is not None:
-        _build_env_for_package(ctx, env_path, pkg)
+        _build_env_for_package(ctx, env_path, pkg, staging=staging)
 
     default_links: dict[str, str] = {"latest": "^", "stable": "latest"}
     make_links(
@@ -201,16 +203,18 @@ async def _build_envs(
     await install_wrapper(ctx, paths)
 
 
-def _build_env_for_package(ctx: Context, env_path: Path, main_package: Package) -> None:
+def _build_env_for_package(
+    ctx: Context, env_path: Path, main_package: Package, *, staging: bool
+) -> None:
     for pkg in chain([main_package], main_package.depends):
-        out = ctx.out_any(pkg)
+        out = ctx.out_any(pkg) if staging else ctx.out_destination(pkg)
         for srcdir, _, files in os.walk(out):
             srcdir_path = Path(srcdir)
             dstdir = env_path / srcdir_path.relative_to(out)
             dstdir.mkdir(parents=True, exist_ok=True)
             for f in files:
                 with suppress(FileExistsError):
-                    target = os.path.relpath(srcdir_path / f, dstdir.resolve())
+                    target = os.path.relpath(srcdir_path / f, dstdir)
                     (dstdir / f).symlink_to(target)
 
     # Write a manifest file
@@ -242,7 +246,7 @@ async def build_all(ctx: Context, stop_after: Package | None = None) -> None:
     if stop_after is not None:
         return
 
-    await _build_envs(ctx, ctx.staging_paths)
+    await _build_envs(ctx, ctx.staging_paths, staging=True)
 
 
 async def install_all(ctx: Context, *, target_paths: Paths) -> None:
@@ -261,4 +265,4 @@ async def install_all(ctx: Context, *, target_paths: Paths) -> None:
         shutil.copytree(from_path, to_path)
         print(f"Installed {pkg.fullname} to {to_path}")
 
-    await _build_envs(ctx, target_paths)
+    await _build_envs(ctx, target_paths, staging=False)
