@@ -251,16 +251,17 @@ async def build_all(ctx: Context, stop_after: Package | None = None) -> None:
 
 async def install_all(ctx: Context, *, target_paths: Paths) -> None:
     for pkg in ctx.packages.values():
-        from_path = ctx.out_staging(pkg)
         to_path = ctx.out_destination(pkg)
 
+        if to_path.exists():
+            print(f"Already installed: {pkg.fullname}", file=sys.stderr)
+            continue
+
+        from_path = ctx.out_staging(pkg)
         if not from_path.exists():
             sys.exit(
                 f"Package {pkg.fullname} has not been built. Run 'karsk build' first."
             )
-        if to_path.exists():
-            print(f"Already installed: {pkg.fullname}", file=sys.stderr)
-            continue
         to_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(from_path, to_path)
         print(f"Installed {pkg.fullname} to {to_path}")
