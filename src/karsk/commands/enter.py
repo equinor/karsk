@@ -59,12 +59,6 @@ class VolumeBindType(click.ParamType):
 
 async def _main(ctx: Context, *args: str, volumes: tuple[VolumeBind, ...]) -> None:
     cwd = Path.cwd()
-    home = Path.home()
-
-    # If current working directory is not inside of home, default to a safe
-    # location
-    if not cwd.is_relative_to(home):
-        cwd = Path("/")
 
     console.log(f"Entering Karsk environment using command: [blue]{shlex.join(args)}")
     proc = await ctx.run(
@@ -73,7 +67,7 @@ async def _main(ctx: Context, *args: str, volumes: tuple[VolumeBind, ...]) -> No
             (KARSK_BASHRC, "/etc/karsk.bashrc", "ro"),
             (ctx.staging_paths.bin, ctx.destination_paths.bin, "ro"),
             (ctx.staging_paths.versions, ctx.destination_paths.versions, "ro"),
-            (home, home, "rw"),
+            (cwd, cwd, "rw"),
             *volumes,
         ],
         env={"KARSK_PATH": str(ctx.destination_paths.bin)},
