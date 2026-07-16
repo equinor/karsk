@@ -8,6 +8,7 @@
       sync = {
         enable = true;
         allExtras = true;
+        allGroups = true;
       };
     };
   };

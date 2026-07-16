@@ -32,7 +32,7 @@ jobs:
         uv sync --group docs
 
     - name: Build docs
-      run: uv run mkdocs build
+      run: uv run zensical build
 
     - name: Build schema
       run: uv run karsk schema -o site/schema.json
