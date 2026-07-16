@@ -40,9 +40,8 @@ dev = [
 ]
 docs = [
   "griffe-pydantic>=1.0",
-  "mkdocs>=1.6",
-  "mkdocs-material>=9.0",
-  "mkdocstrings[python]>=0.26",
+  "mkdocstrings-python>=1.16",
+  "zensical>=0.0.48",
 ]
 
 [build-system]
