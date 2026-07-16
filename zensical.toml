@@ -21,6 +21,9 @@ nav = [
   ] },
 ]
 
+[project.theme.icon]
+logo = "lucide/coffee"
+
 [project.markdown_extensions.admonition]
 
 [project.markdown_extensions.pymdownx.details]
