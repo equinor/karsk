@@ -1,4 +1,4 @@
-Karsk - Keeping Auditable Release Selection Known
+Karsk
 =====
 
 <!-- --8<-- [start:intro] -->
@@ -16,8 +16,10 @@ Karsk solves the following problems for us:
 
 3. **Simple rollbacks**: Because releases are symbolic links, rollbacks are
    quick and painless.
+<!-- --8<-- [end:intro] -->
 
-# How it works
+<!-- --8<-- [start:how-it-works] -->
+## How it works
 
 Karsk has three stages: **build**, **install**, and **sync**. Each stage writes
 to a different location, and the destination is strictly append-only — nothing
@@ -71,7 +73,7 @@ is ever overwritten.
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Build IDs
+### Build IDs
 
 Each environment directory is named `<version>+<build_id>`, e.g. `1.0.0+1`.
 The `+` prefix follows [semver build metadata](https://semver.org/) conventions.
@@ -92,10 +94,9 @@ This is by design. The key invariant is:
   layout exactly, so build IDs match across all remote hosts.
 - **Same manifest = same build** — if a build with an identical manifest
   already exists at the target, it is skipped.
+<!-- --8<-- [end:how-it-works] -->
 
-<!-- --8<-- [end:intro] -->
-
-# Installing
+## Installing
 
 Karsk is written in Python and requires
 [uv](https://docs.astral.sh/uv/getting-started/installation/) and some container
@@ -105,18 +106,18 @@ engine. Currently, only [Podman](https://podman.io/) is supported, but
 To get started, clone this repository and run `uv sync` to get the `karsk`
 executable.
 
-# Using 
+## Using
 
 See [examples](./examples) directory for examples. Use `karsk --help` to view
 documentation.
 
-# Developing
+## Developing
 
-## Karsk entrypoint
+### Karsk entrypoint
 
 Karsk entrypoint is a Rust application that is deployed and serves as the user-facing entrypoint.
 
-# Testing
+## Testing
 
 This project uses [pytest](https://pytest.org) for tests,
 [mypy](https://www.mypy-lang.org/) for type-checking and

@@ -8,9 +8,14 @@ site_dir = "site"
 
 nav = [
   { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Concepts" = "concepts.md" },
   { "Commands" = [
+    { "Common options" = "commands/common-options.md" },
     { "karsk build" = "commands/build.md" },
+    { "karsk build-wrapper" = "commands/build-wrapper.md" },
     { "karsk enter" = "commands/enter.md" },
+    { "karsk init" = "commands/init.md" },
     { "karsk install" = "commands/install.md" },
     { "karsk schema" = "commands/schema.md" },
     { "karsk sync" = "commands/sync.md" },
@@ -18,6 +23,7 @@ nav = [
   ] },
   { "API Reference" = [
     { "karsk.config" = "api/config.md" },
+    { "karsk.context" = "api/context.md" },
   ] },
 ]
 
