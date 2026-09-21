@@ -31,4 +31,9 @@ def subcommand_test(
     ctx.ensure_built()
 
     karsk.testing._CONTEXT = ctx
-    sys.exit(pytest.main([str(ctx.config.tests), *args], plugins=["karsk.testing"]))
+    sys.exit(
+        pytest.main(
+            [str(ctx.config.tests), "--asyncio-mode=auto", *args],
+            plugins=["karsk.testing"],
+        )
+    )
